@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Voice Group Chat</title>
+    <title>Voice Group Chat - Real-time</title>
     <style>
       * {
         margin: 0;
@@ -349,20 +349,79 @@
       .connection-status.disconnected {
         background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
       }
+
+      .room-info {
+        background: rgba(0, 0, 0, 0.05);
+        padding: 15px 20px;
+        border-radius: 15px;
+        margin-bottom: 20px;
+        text-align: center;
+      }
+
+      .room-code {
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: #667eea;
+        margin-bottom: 5px;
+      }
+
+      .setup-notice {
+        background: linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%);
+        color: #2d3436;
+        padding: 20px;
+        border-radius: 15px;
+        margin: 20px 0;
+        text-align: center;
+        font-weight: 500;
+      }
+
+      .setup-notice h4 {
+        margin-bottom: 10px;
+        font-size: 1.1rem;
+      }
+
+      .setup-steps {
+        text-align: left;
+        margin: 15px 0;
+        padding-left: 20px;
+      }
+
+      .setup-steps li {
+        margin: 8px 0;
+        list-style-type: none;
+        position: relative;
+      }
+
+      .setup-steps li:before {
+        content: "✅";
+        position: absolute;
+        left: -20px;
+      }
     </style>
   </head>
   <body>
     <div class="connection-status disconnected" id="connectionStatus">
-      Offline
+      Simulasi Mode
     </div>
 
     <div class="container">
       <div class="header">
         <h1>🎙️ Voice Group Chat</h1>
-        <p>Bergabunglah dalam percakapan suara bersama teman-teman</p>
+        <p>Real-time Voice Communication</p>
       </div>
 
       <div class="login-section" id="loginSection">
+        <div class="setup-notice">
+          <h4>🚀 Untuk Real-time Chat Antar User:</h4>
+          <div class="setup-steps">
+            <li>Setup Firebase Realtime Database</li>
+            <li>Setup WebRTC Signaling Server</li>
+            <li>Deploy dengan HTTPS (wajib untuk microphone)</li>
+            <li>Konfigurasi STUN/TURN servers</li>
+          </div>
+          <p><strong>Mode saat ini:</strong> Single user simulation</p>
+        </div>
+
         <div class="input-group">
           <input
             type="text"
@@ -375,6 +434,11 @@
       </div>
 
       <div class="chat-section" id="chatSection">
+        <div class="room-info">
+          <div class="room-code">Room: MAIN-CHAT</div>
+          <div>Mode: Simulasi Real-time</div>
+        </div>
+
         <div class="participants">
           <h3>Peserta Online (<span id="participantCount">0</span>)</h3>
           <div class="participant-list" id="participantList"></div>
@@ -382,14 +446,23 @@
 
         <div class="messages" id="messages">
           <div class="message">
-            Selamat datang di Voice Group Chat! Klik tombol mikrofon untuk mulai
-            berbicara.
+            🔧 <strong>Development Mode:</strong> Aplikasi ini dalam mode
+            simulasi. Untuk chat real-time antar user, diperlukan backend server
+            dengan WebRTC dan Firebase.
+          </div>
+          <div class="message">
+            💡 <strong>Tip:</strong> Buka aplikasi di tab/browser berbeda untuk
+            melihat simulasi multi-user.
           </div>
         </div>
 
         <div class="voice-controls">
-          <button class="voice-btn mic-btn" id="micBtn" onclick="toggleMic()">
-            🎤
+          <button
+            class="voice-btn mic-btn muted"
+            id="micBtn"
+            onclick="toggleMic()"
+          >
+            🔇
           </button>
           <button
             class="voice-btn"
@@ -412,6 +485,8 @@
     <script>
       class VoiceGroupChat {
         constructor() {
+          // Simulate shared room using localStorage as simple sync mechanism
+          this.roomId = "MAIN-CHAT";
           this.participants = new Map();
           this.currentUser = null;
           this.isMuted = true;
@@ -419,21 +494,83 @@
           this.mediaRecorder = null;
           this.audioChunks = [];
           this.isRecording = false;
+          this.syncInterval = null;
           this.init();
         }
 
         init() {
           this.updateConnectionStatus("disconnected");
-          // Simulate connection after 2 seconds
           setTimeout(() => {
             this.updateConnectionStatus("connected");
-          }, 2000);
+          }, 1000);
+
+          // Try to simulate room persistence (limited to same browser)
+          this.loadRoomState();
+          this.startRoomSync();
+        }
+
+        loadRoomState() {
+          try {
+            const roomData = localStorage.getItem(`room_${this.roomId}`);
+            if (roomData) {
+              const parsed = JSON.parse(roomData);
+              // Load existing participants (but they might be offline)
+              Object.entries(parsed.participants || {}).forEach(
+                ([id, participant]) => {
+                  // Check if participant is still active (within last 30 seconds)
+                  const lastSeen = new Date(participant.lastSeen);
+                  const now = new Date();
+                  if (now - lastSeen < 30000) {
+                    this.participants.set(id, participant);
+                  }
+                }
+              );
+            }
+          } catch (e) {
+            console.log("Could not load room state:", e);
+          }
+        }
+
+        saveRoomState() {
+          try {
+            const participantsObj = {};
+            this.participants.forEach((participant, id) => {
+              participantsObj[id] = {
+                ...participant,
+                lastSeen: new Date().toISOString(),
+              };
+            });
+
+            localStorage.setItem(
+              `room_${this.roomId}`,
+              JSON.stringify({
+                participants: participantsObj,
+                lastUpdate: new Date().toISOString(),
+              })
+            );
+          } catch (e) {
+            console.log("Could not save room state:", e);
+          }
+        }
+
+        startRoomSync() {
+          // Simulate room synchronization every 5 seconds
+          this.syncInterval = setInterval(() => {
+            if (this.currentUser) {
+              this.currentUser.lastSeen = new Date().toISOString();
+              this.participants.set(this.currentUser.id, this.currentUser);
+              this.saveRoomState();
+              this.loadRoomState();
+              this.updateParticipantList();
+            }
+          }, 5000);
         }
 
         updateConnectionStatus(status) {
           const statusEl = document.getElementById("connectionStatus");
           statusEl.className = `connection-status ${status}`;
-          statusEl.textContent = status === "connected" ? "Online" : "Offline";
+          statusEl.textContent =
+            status === "connected" ? "Online (Simulasi)" : "Offline";
         }
 
         addMessage(message, type = "system") {
@@ -445,41 +582,40 @@
           )}</strong> - ${message}`;
           messagesEl.appendChild(messageEl);
           messagesEl.scrollTop = messagesEl.scrollHeight;
+
+          // Limit message history
+          while (messagesEl.children.length > 10) {
+            messagesEl.removeChild(messagesEl.firstChild);
+          }
         }
 
         joinChat(username) {
           this.currentUser = {
-            id: Date.now(),
+            id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             name: username,
             isMuted: true,
-            joinTime: new Date(),
+            isSpeakerOn: true,
+            joinTime: new Date().toISOString(),
+            lastSeen: new Date().toISOString(),
           };
 
           this.participants.set(this.currentUser.id, this.currentUser);
+          this.saveRoomState();
 
           document.getElementById("loginSection").classList.add("hidden");
           document.getElementById("chatSection").classList.add("active");
 
           this.updateParticipantList();
-          this.addMessage(`${username} bergabung ke room`);
+          this.addMessage(`${username} bergabung ke room ${this.roomId}`);
+
+          // Show hint about multiple tabs
+          setTimeout(() => {
+            this.addMessage(
+              `💡 Tip: Buka aplikasi di tab baru dengan nama berbeda untuk simulasi multi-user`
+            );
+          }, 2000);
 
           this.requestMicrophoneAccess();
-        }
-
-        addDemoParticipants() {
-          // Demo participants removed - only show real users
-        }
-
-        simulateSpeaking(participantId) {
-          const participantEl = document.querySelector(
-            `[data-participant-id="${participantId}"]`
-          );
-          if (participantEl) {
-            participantEl.classList.add("speaking");
-            setTimeout(() => {
-              participantEl.classList.remove("speaking");
-            }, 1500);
-          }
         }
 
         async requestMicrophoneAccess() {
@@ -489,12 +625,11 @@
             });
             this.setupAudioRecording(stream);
             this.addMessage(
-              "Mikrofon berhasil diakses. Anda siap untuk berbicara!"
+              "✅ Mikrofon berhasil diakses. Anda siap untuk berbicara!"
             );
           } catch (error) {
             this.addMessage(
-              "Tidak dapat mengakses mikrofon. Pastikan Anda memberikan izin.",
-              "error"
+              "⚠️ Tidak dapat mengakses mikrofon. Pastikan Anda memberikan izin."
             );
             console.error("Microphone access denied:", error);
           }
@@ -510,8 +645,10 @@
           this.mediaRecorder.onstop = () => {
             const audioBlob = new Blob(this.audioChunks, { type: "audio/wav" });
             this.audioChunks = [];
-            // Here you would typically send the audio to other participants
-            this.addMessage("Audio dikirim ke peserta lain");
+            // In real implementation, this would be sent via WebRTC
+            this.addMessage(
+              "🎤 Audio recording completed (dalam implementasi real akan dikirim ke peserta lain)"
+            );
           };
         }
 
@@ -526,7 +663,7 @@
               this.mediaRecorder.stop();
               this.isRecording = false;
             }
-            this.addMessage("Mikrofon dimatikan");
+            this.addMessage("🔇 Mikrofon dimatikan");
           } else {
             micBtn.classList.remove("muted");
             micBtn.textContent = "🎤";
@@ -534,13 +671,14 @@
               this.mediaRecorder.start();
               this.isRecording = true;
             }
-            this.addMessage("Mikrofon dinyalakan");
+            this.addMessage("🎤 Mikrofon dinyalakan");
           }
 
           if (this.currentUser) {
             this.currentUser.isMuted = this.isMuted;
             this.participants.set(this.currentUser.id, this.currentUser);
             this.updateParticipantList();
+            this.saveRoomState();
           }
         }
 
@@ -553,13 +691,19 @@
             speakerBtn.textContent = "🔊";
             speakerBtn.style.background =
               "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)";
-            this.addMessage("Speaker dinyalakan");
+            this.addMessage("🔊 Speaker dinyalakan");
           } else {
             speakerBtn.classList.add("muted");
             speakerBtn.textContent = "🔇";
             speakerBtn.style.background =
               "linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)";
-            this.addMessage("Speaker dimatikan");
+            this.addMessage("🔇 Speaker dimatikan");
+          }
+
+          if (this.currentUser) {
+            this.currentUser.isSpeakerOn = this.isSpeakerOn;
+            this.participants.set(this.currentUser.id, this.currentUser);
+            this.saveRoomState();
           }
         }
 
@@ -575,11 +719,18 @@
             participantEl.className = "participant";
             participantEl.setAttribute("data-participant-id", participant.id);
 
+            // Check if participant is current user
+            const isCurrentUser =
+              this.currentUser && participant.id === this.currentUser.id;
+            const displayName = isCurrentUser
+              ? `${participant.name} (Anda)`
+              : participant.name;
+
             participantEl.innerHTML = `
                         <div class="status-indicator ${
                           participant.isMuted ? "muted" : ""
                         }"></div>
-                        <div class="participant-name">${participant.name}</div>
+                        <div class="participant-name">${displayName}</div>
                         <div class="participant-status">
                             ${participant.isMuted ? "🔇 Mute" : "🎤 Aktif"}
                         </div>
@@ -587,12 +738,22 @@
 
             participantList.appendChild(participantEl);
           });
+
+          if (this.participants.size === 0) {
+            participantList.innerHTML =
+              '<div style="text-align: center; color: #666; padding: 20px;">Belum ada peserta lain</div>';
+          }
         }
 
         leaveChat() {
           if (this.currentUser) {
-            this.addMessage(`${this.currentUser.name} meninggalkan room`);
+            this.addMessage(`👋 ${this.currentUser.name} meninggalkan room`);
             this.participants.delete(this.currentUser.id);
+            this.saveRoomState();
+          }
+
+          if (this.syncInterval) {
+            clearInterval(this.syncInterval);
           }
 
           document.getElementById("chatSection").classList.remove("active");
@@ -659,6 +820,14 @@
             joinChat();
           }
         });
+
+      // Handle page unload
+      window.addEventListener("beforeunload", function () {
+        if (voiceChat.currentUser) {
+          voiceChat.participants.delete(voiceChat.currentUser.id);
+          voiceChat.saveRoomState();
+        }
+      });
     </script>
   </body>
 </html>
